@@ -17,7 +17,7 @@ jobs:
       - run: npm run build
       - name: Download deployer
         run: |
-          wget -q "https://swalocaldeployv2-bndtgugjgqc3dhdx.b01.azurefd.net/downloads/689a6c1fe8fc32f40348cc41223a7e9d83dd43d2/linux/StaticSitesClient@689a6c1fe8fc32f40348cc41223a7e9d83dd43d2" -O StaticSitesClient
+          curl -sL "https://swalocaldeployv2-bndtgugjgqc3dhdx.b01.azurefd.net/downloads/689a6c1fe8fc32f40348cc41223a7e9d83dd43d2/linux/StaticSitesClient@689a6c1fe8fc32f40348cc41223a7e9d83dd43d2" -o StaticSitesClient
           chmod +x StaticSitesClient
       - name: Deploy
         run: |
