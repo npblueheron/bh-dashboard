@@ -1,0 +1,29 @@
+name: Deploy BH Dashboard
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: npm ci
+      - run: npm run build
+      - name: Download deployer
+        run: |
+          wget -q "https://swalocaldeployv2-bndtgugjgqc3dhdx.b01.azurefd.net/downloads/689a6c1fe8fc32f40348cc41223a7e9d83dd43d2/linux/StaticSitesClient@689a6c1fe8fc32f40348cc41223a7e9d83dd43d2" -O StaticSitesClient
+          chmod +x StaticSitesClient
+      - name: Deploy
+        run: |
+          ./StaticSitesClient upload \
+            --app ./dist \
+            --api ./api \
+            --apiToken "${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_THANKFUL_POND_052FBEB0F }}" \
+            --skipAppBuild true \
+            --skipApiBuild true
