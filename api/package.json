@@ -1,0 +1,8 @@
+{
+  "name": "bh-dashboard-api",
+  "version": "1.0.0",
+  "description": "Blue Heron Dashboard API",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

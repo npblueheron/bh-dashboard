@@ -1,4 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import { useMsal, useIsAuthenticated } from "@azure/msal-react";
+import { InteractionRequiredAuthError } from "@azure/msal-browser";
+import { loginRequest } from "./services/authConfig";
+import { fetchProjects } from "./services/powerbiApi";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 const T = {
@@ -14,7 +18,7 @@ const fmtPct = n => Math.round(Number(n) || 0) + "%";
 const num = v => Number(v) || 0;
 
 function PhaseBadge({ phase }) {
-  const s = { CONSTRUCTION: { background: "#FEF5E7", color: "#7D4E0F" }, PRECON: { background: "#EBF0F8", color: "#1a3260" }, WARRANTY: { background: "#EEEDFE", color: "#4338CA" } }[phase] || { background: "#F1F3F5", color: T.muted };
+  const s = { CONSTRUCTION: { background: "#FEF5E7", color: "#7D4E0F" }, PRECON: { background: "#EBF0F8", color: "#1a3260" } }[phase] || { background: "#F1F3F5", color: T.muted };
   return <span style={{ ...s, padding: "2px 8px", borderRadius: 3, fontSize: 10, fontWeight: 700, textTransform: "uppercase", display: "inline-block" }}>{phase || "—"}</span>;
 }
 
@@ -57,7 +61,27 @@ function ProgressBar({ pct }) {
   );
 }
 
-function Header({ onRefresh, lastUpdated }) {
+function LoginPage({ onLogin }) {
+  return (
+    <div style={{ minHeight: "100vh", background: T.navy, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "center" }}>
+        <span style={{ display: "block", width: 40, height: 16, background: T.gold, borderRadius: 2 }} />
+        <span style={{ display: "block", width: 28, height: 10, background: T.gold, borderRadius: 2 }} />
+        <span style={{ display: "block", width: 16, height: 6, background: T.gold, borderRadius: 2 }} />
+      </div>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 24, fontWeight: 300, color: "white", letterSpacing: 4, textTransform: "uppercase", marginBottom: 8 }}>Blue Heron</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", letterSpacing: 2, textTransform: "uppercase" }}>Project Dashboard</div>
+      </div>
+      <button onClick={onLogin} style={{ background: T.gold, color: T.navy, border: "none", padding: "12px 32px", borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: "pointer", letterSpacing: 1, textTransform: "uppercase", fontFamily: "inherit", marginTop: 16 }}>
+        Sign in with Microsoft
+      </button>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>Use your Blue Heron Microsoft account</div>
+    </div>
+  );
+}
+
+function Header({ onRefresh, lastUpdated, onLogout, userName }) {
   return (
     <header style={{ background: T.navy, height: 58, padding: "0 28px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -69,48 +93,67 @@ function Header({ onRefresh, lastUpdated }) {
         <span style={{ fontSize: 15, fontWeight: 600, color: "white", letterSpacing: 3, textTransform: "uppercase" }}>Blue Heron</span>
         <span style={{ width: 1, height: 24, background: "rgba(255,255,255,0.2)", margin: "0 12px" }} />
         <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", letterSpacing: 1, textTransform: "uppercase" }}>Project Dashboard</span>
-        {lastUpdated && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginLeft: 8 }}>Last updated: {lastUpdated}</span>}
+        {lastUpdated && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginLeft: 8 }}>Updated: {lastUpdated}</span>}
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {userName && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{userName}</span>}
         <button onClick={onRefresh} style={{ background: "transparent", border: `1px solid rgba(201,168,76,0.4)`, color: T.gold, padding: "5px 14px", borderRadius: 3, fontSize: 11, fontWeight: 500, letterSpacing: 0.8, textTransform: "uppercase", cursor: "pointer", fontFamily: "inherit" }}>↻ Refresh</button>
-        {["Community DB", "Elite DB", "Nexus DB"].map(l => (
-          <button key={l} style={{ background: "transparent", border: `1px solid rgba(201,168,76,0.4)`, color: T.gold, padding: "5px 14px", borderRadius: 3, fontSize: 11, fontWeight: 500, letterSpacing: 0.8, textTransform: "uppercase", cursor: "pointer", fontFamily: "inherit" }}>{l}</button>
-        ))}
+        <button onClick={onLogout} style={{ background: "transparent", border: `1px solid rgba(255,255,255,0.2)`, color: "rgba(255,255,255,0.5)", padding: "5px 14px", borderRadius: 3, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>Sign out</button>
       </div>
     </header>
   );
 }
 
 export default function App() {
+  const { instance, accounts } = useMsal();
+  const isAuthenticated = useIsAuthenticated();
   const [projects, setProjects] = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
-  const [phaseFilter, setPhaseFilter]   = useState("all");
+  const [phaseFilter, setPhaseFilter] = useState("all");
   const [healthFilter, setHealthFilter] = useState("all");
-  const [lastUpdated, setLastUpdated]   = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  const handleLogin = async () => {
+    try {
+      await instance.loginPopup(loginRequest);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleLogout = () => instance.logoutPopup();
 
   const load = useCallback(async () => {
+    if (!isAuthenticated) return;
     setLoading(true); setError(null);
     try {
-      const res = await fetch("/api/projects");
-      if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
-      const json = await res.json();
-      setProjects(json.data || []);
-      setLastUpdated(new Date(json.timestamp).toLocaleTimeString());
+      const data = await fetchProjects(instance);
+      setProjects(data);
+      setLastUpdated(new Date().toLocaleTimeString());
     } catch (e) {
-      setError(e.message);
+      if (e instanceof InteractionRequiredAuthError) {
+        await instance.loginPopup(loginRequest);
+      } else {
+        setError(e.message);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated, instance]);
 
   useEffect(() => {
-    load();
-    // Auto-refresh every 5 minutes
-    const interval = setInterval(load, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [load]);
+    if (isAuthenticated) {
+      load();
+      const interval = setInterval(load, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, load]);
+
+  if (!isAuthenticated) return <LoginPage onLogin={handleLogin} />;
+
+  const userName = accounts[0]?.name || accounts[0]?.username;
 
   const filtered = projects.filter(p => {
     if (phaseFilter !== "all" && p.current_phase !== phaseFilter) return false;
@@ -138,28 +181,28 @@ export default function App() {
   if (loading) return (
     <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
       <div style={{ width: 40, height: 40, border: `3px solid ${T.border}`, borderTop: `3px solid ${T.navy}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-      <div style={{ color: T.muted, fontSize: 13 }}>Loading live project data from Fabric…</div>
+      <div style={{ color: T.muted, fontSize: 13 }}>Loading live project data…</div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
     </div>
   );
 
   if (error) return (
     <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 24 }}>
+      <Header onRefresh={load} lastUpdated={lastUpdated} onLogout={handleLogout} userName={userName} />
       <div style={{ fontSize: 13, color: T.red, background: "#FDECEA", border: `1px solid ${T.red}`, borderRadius: 6, padding: "16px 24px", maxWidth: 600, textAlign: "center" }}>
-        <strong>Connection error</strong><br /><br />{error}
+        <strong>Error loading data</strong><br /><br />{error}
       </div>
       <button onClick={load} style={{ background: T.navy, color: "white", border: "none", padding: "8px 20px", borderRadius: 4, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>Retry</button>
     </div>
   );
 
-  // ── Detail view ──────────────────────────────────────────
   if (selected) {
     const p = selected;
     const ahead = !(p.schedule_variance || "").startsWith("-");
     return (
       <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
         <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
-        <Header onRefresh={load} lastUpdated={lastUpdated} />
+        <Header onRefresh={load} lastUpdated={lastUpdated} onLogout={handleLogout} userName={userName} />
         <div style={{ padding: "20px 28px" }}>
           <button onClick={() => setSelected(null)} style={{ background: "transparent", border: `1px solid ${T.border}`, padding: "6px 14px", borderRadius: 4, fontSize: 12, color: T.muted, cursor: "pointer", marginBottom: 16, fontFamily: "inherit" }}>← All Projects</button>
           <div style={{ background: "#EBF0F8", borderLeft: `3px solid ${T.navy}`, borderRadius: "0 4px 4px 0", padding: "10px 14px", marginBottom: 16, fontSize: 12 }}>
@@ -193,18 +236,18 @@ export default function App() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
             <Panel title="Schedule Variance">
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-                {[["Baseline Start", p.baseline_start_date], ["Baseline Finish", p.baseline_end_date], ["Variance", null], ["Actual Start", p.actual_start_date], ["Forecasted Turnover", p.current_forcasted_turnover]].map((item, i) =>
+                {[["Baseline Start", p.baseline_start_date], ["Baseline Finish", p.baseline_end_date], null, ["Actual Start", p.actual_start_date], ["Forecasted Turnover", p.current_forcasted_turnover]].map((item, i) =>
                   i === 2 ? (
                     <div key="var" style={{ textAlign: "center" }}>
                       <div style={{ fontSize: 10, textTransform: "uppercase", color: T.muted, marginBottom: 5, fontWeight: 500 }}>Variance</div>
                       <span style={{ background: ahead ? T.green : T.red, color: "white", padding: "5px 12px", borderRadius: 4, fontSize: 12, fontWeight: 700, display: "inline-block" }}>{ahead ? "+" : ""}{p.schedule_variance || "0d"}</span>
                     </div>
-                  ) : (
+                  ) : item ? (
                     <div key={item[0]} style={{ textAlign: "center" }}>
                       <div style={{ fontSize: 10, textTransform: "uppercase", color: T.muted, marginBottom: 5, fontWeight: 500 }}>{item[0]}</div>
                       <div style={{ fontSize: 12, fontWeight: 600 }}>{item[1] || "—"}</div>
                     </div>
-                  )
+                  ) : null
                 )}
               </div>
             </Panel>
@@ -234,13 +277,10 @@ export default function App() {
     );
   }
 
-  // ── List view ────────────────────────────────────────────
   return (
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
       <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } tr:hover td { background: #F8F9FB !important; }`}</style>
-      <Header onRefresh={load} lastUpdated={lastUpdated} />
-
-      {/* Filter bar */}
+      <Header onRefresh={load} lastUpdated={lastUpdated} onLogout={handleLogout} userName={userName} />
       <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, padding: "10px 28px", display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
         {[["Project", <select key="p" onChange={e => e.target.value !== "all" && setSelected(projects[parseInt(e.target.value)])} style={{ fontFamily: "inherit", fontSize: 13, fontWeight: 500, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 4, padding: "5px 10px", cursor: "pointer", minWidth: 200 }}>
           <option value="all">All Projects</option>
@@ -262,9 +302,7 @@ export default function App() {
           </div>
         ))}
       </div>
-
       <div style={{ padding: "20px 28px" }}>
-        {/* KPIs */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, marginBottom: 20 }}>
           <KpiCard label="Total Projects" value={total} sub="Ascaya community" />
           <KpiCard label="In Construction" value={inCon} sub="Active builds" accent={T.gold} />
@@ -272,14 +310,12 @@ export default function App() {
           <KpiCard label="Overdue Tasks" value={overdue} sub="Across all projects" accent={T.red} />
           <KpiCard label="Open Issues" value={issues} sub={issues > 0 ? "Needs attention" : "All clear"} accent={issues > 0 ? T.red : T.green} />
         </div>
-
-        {/* Charts */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
           <Panel title="Projects by Phase">
             <ResponsiveContainer width="100%" height={180}>
               <PieChart>
                 <Pie data={phaseData} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={11}>
-                  {phaseData.map((_, i) => <Cell key={i} fill={[T.gold, T.navy, T.muted][i % 3]} />)}
+                  {phaseData.map((_, i) => <Cell key={i} fill={[T.gold, T.navy][i % 2]} />)}
                 </Pie>
                 <Tooltip />
               </PieChart>
@@ -296,8 +332,6 @@ export default function App() {
             </ResponsiveContainer>
           </Panel>
         </div>
-
-        {/* Table */}
         <Panel title="All Projects" count={filtered.length}>
           <div style={{ overflowX: "auto", margin: "-14px -16px" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>

@@ -1,5 +1,5 @@
 {
-  "name": "bh-dashboard-prod",
+  "name": "bh-dashboard",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -8,6 +8,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure/msal-browser": "^3.10.0",
+    "@azure/msal-react": "^2.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "recharts": "^2.10.0"
