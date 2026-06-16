@@ -124,7 +124,7 @@ export default function App() {
     try {
       await instance.loginRedirect({
         ...loginRequest,
-        redirectUri: "https://thankful-pond-052fbeb0f.7.azurestaticapps.net"
+        redirectUri: "https://dashboard.blueheron.com"
       });
     } catch (e) {
       console.error(e);
@@ -133,7 +133,7 @@ export default function App() {
 
   const handleLogout = () => {
     instance.logoutRedirect({
-      postLogoutRedirectUri: "https://thankful-pond-052fbeb0f.7.azurestaticapps.net"
+      postLogoutRedirectUri: "https://dashboard.blueheron.com"
     });
   };
 
@@ -148,7 +148,7 @@ export default function App() {
       if (e instanceof InteractionRequiredAuthError) {
         await instance.loginRedirect({
           ...loginRequest,
-          redirectUri: "https://thankful-pond-052fbeb0f.7.azurestaticapps.net"
+          redirectUri: "https://dashboard.blueheron.com"
         });
       } else {
         setError(e.message);
