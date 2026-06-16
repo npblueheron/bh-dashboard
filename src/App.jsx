@@ -115,15 +115,27 @@ export default function App() {
   const [healthFilter, setHealthFilter] = useState("all");
   const [lastUpdated, setLastUpdated] = useState(null);
 
+  // Handle redirect response on page load
+  useEffect(() => {
+    instance.handleRedirectPromise().catch(console.error);
+  }, [instance]);
+
   const handleLogin = async () => {
     try {
-      await instance.loginPopup(loginRequest);
+      await instance.loginRedirect({
+        ...loginRequest,
+        redirectUri: "https://thankful-pond-052fbeb0f.7.azurestaticapps.net"
+      });
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleLogout = () => instance.logoutPopup();
+  const handleLogout = () => {
+    instance.logoutRedirect({
+      postLogoutRedirectUri: "https://thankful-pond-052fbeb0f.7.azurestaticapps.net"
+    });
+  };
 
   const load = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -134,7 +146,10 @@ export default function App() {
       setLastUpdated(new Date().toLocaleTimeString());
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {
-        await instance.loginPopup(loginRequest);
+        await instance.loginRedirect({
+          ...loginRequest,
+          redirectUri: "https://thankful-pond-052fbeb0f.7.azurestaticapps.net"
+        });
       } else {
         setError(e.message);
       }

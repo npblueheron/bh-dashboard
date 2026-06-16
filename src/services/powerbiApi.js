@@ -44,8 +44,8 @@ async function findDataset(msalInstance) {
   if (!ws) throw new Error('Workspace WS_BH_DATA_DEV not found');
 
   const datasets = await pbiGet(msalInstance, `/groups/${ws.id}/datasets`);
-  const ds = datasets.value.find(d => d.name === 'Project_Dashboard_Model');
-  if (!ds) throw new Error('Project_Dashboard_Model not found');
+  const ds = datasets.value.find(d => d.name.toLowerCase() === 'project_dashboard_model');
+  if (!ds) throw new Error(`Dataset not found. Available: ${datasets.value.map(d=>d.name).join(', ')}`);
 
   return { workspaceId: ws.id, datasetId: ds.id };
 }
